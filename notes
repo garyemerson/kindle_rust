@@ -1,0 +1,10 @@
+TODO
+====
+* implement meme retrieval on kindle side
+* fix Content-type on server side
+* website for upload picture
+    * implement POST method for meme upload on server side
+    * implement GET method for battery status on server side
+
+kindle resolution:
+768 widht x 1024 height
