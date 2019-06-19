@@ -1,3 +1,5 @@
+build with: cargo build --release --target=arm-unknown-linux-musleabi
+
 TODO
 ====
 * website for upload picture

@@ -3,19 +3,15 @@ extern crate libc;
 extern crate image;
 extern crate chrono;
 
-// use std::cmp::min;
-// use std::env;
 // use std::io::prelude::*;
 // use std::net::TcpStream;
 // use std::io::{self, Write};
 use std::cell::RefCell;
 use std::cmp::min;
 use std::fs::{self, OpenOptions};
-use std::mem;
+use std::{mem, env, str};
 use std::os::unix::io::AsRawFd;
-use std::process::Command;
-use std::process::exit;
-use std::str;
+use std::process::{exit, Command};
 use std::thread::sleep;
 use std::time::{/*Instant, SystemTime,*/ Duration};
 // use image::imageops::{resize, overlay /*, brighten*/};
@@ -185,6 +181,8 @@ fn get_fscreen_info(fb_desc: i32) -> Result<FbFixScreenInfo, String> {
 // done
 
 fn main() {
+    env::set_var("RUST_BACKTRACE", "1");
+
     loop {
         match maybe_update_meme() {
             Ok(updated) => {
@@ -231,6 +229,7 @@ fn maybe_update_meme() -> Result<bool, String> {
         .map_err(|e| format!("Error updating status and getting meme id: {}", e))?;
 
     if server_meme_id == -1 {
+        log("server meme id is -1, exiting");
         exit(0);
     }
 
