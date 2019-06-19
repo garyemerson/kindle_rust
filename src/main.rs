@@ -206,7 +206,7 @@ fn log(msg: &str) {
 }
 
 fn kindle_sleep(process_sleep: Duration, deep_sleep: Duration) -> Result<(), String> {
-    log(&format!("Doing process sleep for {} seconds to allow system work", process_sleep.as_secs()));
+    log(&format!("process sleep for {} seconds to allow system work", process_sleep.as_secs()));
     sleep(process_sleep);
 
     log(&format!("setting alarm for {} seconds in the future", deep_sleep.as_secs()));
