@@ -1,10 +1,29 @@
 TODO
 ====
-* implement meme retrieval on kindle side
-* fix Content-type on server side
 * website for upload picture
     * implement POST method for meme upload on server side
     * implement GET method for battery status on server side
+* move almost all image processing to server side and do minimal processing on kindle to preserve battery
+* fix Content-type on server side, right now everything is hardcoded as "application/json; charset=utf-8"
+* alert and/or badge when kindle battery is low
+
 
 kindle resolution:
 768 widht x 1024 height
+
+
+17%: 61.413 min (12 updates)
+18%: 61.413 min (12 updates)
+19%: 61.413 min (12 updates)
+20%: 55.83 min (11 updates)
+21%: 66.996 min (13 updates)
+22%: 55.83 min (11 updates)
+23%: 61.413 min (12 updates)
+24%: 61.413 min (12 updates)
+25%: 61.413 min (12 updates)
+26%: 61.413 min (12 updates)
+
+1 update ~= 1/12%
+
+avg time per percent:
+60.854699999999994 min

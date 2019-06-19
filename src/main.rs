@@ -7,15 +7,19 @@ extern crate chrono;
 // use std::env;
 // use std::io::prelude::*;
 // use std::net::TcpStream;
-use std::time::{/*Instant, SystemTime,*/ Duration};
+// use std::io::{self, Write};
+use std::cell::RefCell;
+use std::cmp::min;
 use std::fs::{self, OpenOptions};
 use std::mem;
 use std::os::unix::io::AsRawFd;
 use std::process::Command;
+use std::process::exit;
 use std::str;
 use std::thread::sleep;
-use image::imageops::{resize /*, brighten*/};
-use image::{ImageBuffer, Luma, DynamicImage, Pixel, FilterType, load_from_memory};
+use std::time::{/*Instant, SystemTime,*/ Duration};
+// use image::imageops::{resize, overlay /*, brighten*/};
+use image::{ImageBuffer, Luma, DynamicImage, Pixel, /*FilterType,*/ load_from_memory};
 use libc::ioctl;
 use memmap::{MmapOptions, MmapMut};
 use chrono::Local;
@@ -124,8 +128,10 @@ struct MxcfbUpdateData51 {
     alt_buffer_data: MxcfbAltBufferData
 }
 
-const MEME_ID_PATH: &'static str = "/mnt/us/garspace/workspaces/meme_board/meme_id";
-
+thread_local! {
+    static LOCAL_MEME_ID: RefCell<Option<i32>> = RefCell::new(None);
+}
+// const MEME_LOG_FILE: &str = "meme.log";
 
 fn get_vscreen_info(fb_desc: i32) -> Result<FbVarScreenInfo, String> {
     let mut vinfo: FbVarScreenInfo = unsafe { mem::zeroed() };
@@ -168,32 +174,24 @@ fn get_fscreen_info(fb_desc: i32) -> Result<FbFixScreenInfo, String> {
 // * from webpage, XMLHttpRequest is made to upload image
 // * on server, image data is written to file and meme_id is incremented
 
-// kindle update:
-// * POST to send battery status and get meme_id
-// * from meme_id determine if udpate needed
-// * if yes then
-// *    GET request for meme image
-// *    draw meme
-// * go to sleep for 5 min
+// while true; do
+//         echo "doing meme work"
+//         ./kindle_rust
+//         echo +60 > /sys/devices/platform/pmic_rtc.1/rtc/rtc1/wakealarm
+//         echo "doing process sleep to allow system work"
+//         sleep 30
+//         echo "sleeping"
+//         echo mem > /sys/power/state
+// done
 
 fn main() {
-    // let url = env::args().nth(1).expect("Must supply arg for url");
-    // let output_raw = Command::new("curl")
-    //     .arg(url)
-    //     .output()
-    //     .expect("failed to execute curl")
-    //     .stdout;
-    // let output = str::from_utf8(&output_raw)
-    //     .expect("output to utf8");
-    // println!("output is:\n'{}'", output);
-
     loop {
         match maybe_update_meme() {
             Ok(updated) => {
                 if updated {
                     log("updated meme");
                 } else {
-                    log("update not necessary");
+                    log("no update necessary");
                 }
             },
             Err(e) => {
@@ -201,7 +199,7 @@ fn main() {
             }
         }
 
-        kindle_sleep(5 * 60)
+        kindle_sleep(Duration::from_secs(30), Duration::from_secs(5 * 60))
             .unwrap_or_else(|e| log(&format!("Error putting kindle to sleep: {}", e)));
     }
 }
@@ -210,13 +208,16 @@ fn log(msg: &str) {
     println!("[{}] {}", Local::now(), msg);
 }
 
-fn kindle_sleep(seconds: i32) -> Result<(), String> {
-    log(&format!("sleeping and setting alarm for {} seconds in the future", seconds));
+fn kindle_sleep(process_sleep: Duration, deep_sleep: Duration) -> Result<(), String> {
+    log(&format!("Doing process sleep for {} seconds to allow system work", process_sleep.as_secs()));
+    sleep(process_sleep);
 
+    log(&format!("setting alarm for {} seconds in the future", deep_sleep.as_secs()));
     let wakealarm_path = "/sys/devices/platform/pmic_rtc.1/rtc/rtc1/wakealarm";
-    fs::write(wakealarm_path, format!("+{}", seconds))
+    fs::write(wakealarm_path, format!("+{}", deep_sleep.as_secs()))
         .map_err(|e| format!("Error writing to {}: {}", wakealarm_path, e))?;
 
+    log("deep sleeping");
     let power_state_path = "/sys/power/state";
     fs::write(power_state_path, "mem")
         .map_err(|e| format!("Error writing to {}: {}", "/sys/power/state", e))?;
@@ -229,26 +230,29 @@ fn maybe_update_meme() -> Result<bool, String> {
     let server_meme_id = update_battery_status_and_get_meme_id()
         .map_err(|e| format!("Error updating status and getting meme id: {}", e))?;
 
-    let local_meme_id_raw = fs::read_to_string(MEME_ID_PATH)
-        .map_err(|e| format!("Error reading local meme id from {}: {}", MEME_ID_PATH, e))?;
-    let local_meme_id = local_meme_id_raw.trim().parse::<i32>()
-        .map_err(|e| format!("Error parsing '{}' as i32: {}", local_meme_id_raw, e))?;
-
-    log(&format!("server_meme_id is {}, local_meme_id is {}", server_meme_id, local_meme_id));
-    if local_meme_id != server_meme_id {
-        let output_raw: Vec<u8> = Command::new("curl")
-            .arg("http://garspace.com/metrics/api/meme")
-            .output()
-            .map_err(|e| format!("Error to executing curl to get meme: {}", e))?
-            .stdout;
-        let img = load_from_memory(&output_raw)
-            .map_err(|e| format!("Error loading PNG from buffer with length {}: {}", output_raw.len(), e))?;
-        update_meme(img, server_meme_id)
-            .map_err(|e| format!("Error updating meme: {}", e))?;
-        Ok(true)
-    } else {
-        Ok(false)
+    if server_meme_id == -1 {
+        exit(0);
     }
+
+    LOCAL_MEME_ID.with(|local_meme_id_cell| {
+        let mut local_meme_id = local_meme_id_cell.borrow_mut();
+        log(&format!("server_meme_id is {}, local_meme_id is {:?}", server_meme_id, local_meme_id));
+
+        if local_meme_id.is_none() || local_meme_id.expect("id") != server_meme_id {
+            let output_raw: Vec<u8> = Command::new("curl")
+                .arg("http://garspace.com/metrics/api/meme")
+                .output()
+                .map_err(|e| format!("Error to executing curl to get meme: {}", e))?
+                .stdout;
+            let img = load_from_memory(&output_raw)
+                .map_err(|e| format!("Error loading PNG from buffer with length {}: {}", output_raw.len(), e))?;
+            update_meme(img, server_meme_id, &mut local_meme_id)
+                .map_err(|e| format!("Error updating meme: {}", e))?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    })
 }
 
 fn update_battery_status_and_get_meme_id() -> Result<i32, String> {
@@ -257,7 +261,6 @@ fn update_battery_status_and_get_meme_id() -> Result<i32, String> {
         .map_err(|e| format!("Error reading battery percentage from {}: {}", battery_percent_path, e))?;
     let battery_percent = battery_percent_raw.trim().trim_matches('%');
 
-    // curl --data 97 http://garspace.com/metrics/api/meme_status
     let output_raw = Command::new("curl")
         .arg("--data")
         .arg(battery_percent)
@@ -285,10 +288,12 @@ fn clear_screen() -> Result<(), String> {
         .output()
         .map_err(|e| format!("failed to execute eips: {}", e))?;
 
+    sleep(Duration::from_millis(1000));
+
     Ok(())
 }
 
-fn update_meme(img: DynamicImage, meme_id: i32) -> Result<(), String> {
+fn update_meme(img: DynamicImage, server_meme_id: i32, local_meme_id: &mut Option<i32>) -> Result<(), String> {
     clear_screen()
         .map_err(|e| format!("Error clearing screen: {}", e))?;
 
@@ -312,26 +317,13 @@ fn update_meme(img: DynamicImage, meme_id: i32) -> Result<(), String> {
 
     let screensize = (vinfo.yres * finfo.line_length) as usize;
     // println!("screensize is {}", screensize);
-    // println!("mmaping...");
     let mut fb_mmap: MmapMut = unsafe {
         MmapOptions::new()
             .len(screensize)
             .map_mut(&fb)
             .map_err(|e| format!("error mmap-ing fb: {}", e))?
     };
-    // println!("done");
     let fb_ptr: *mut u8 = fb_mmap.as_mut_ptr();
-
-    // println!("vinfo.xres {}", vinfo.xres);
-    // for x in 100..200 {
-    //     for y in 100..200 {
-    //         let idx = (x + y * finfo.line_length) as isize;
-    //         // println!("idx is {}", idx);
-    //         unsafe {
-    //             *fb_ptr.offset(idx) = 50u8;
-    //         }
-    //     }
-    // }
 
     let mut update_info: MxcfbUpdateData51 = unsafe { mem::zeroed() };
     update_info.waveform_mode = 2;
@@ -339,17 +331,8 @@ fn update_meme(img: DynamicImage, meme_id: i32) -> Result<(), String> {
     update_info.temp = 0x1001;
     update_info.update_region.width = vinfo.xres;
     update_info.update_region.height = vinfo.yres;
-    // unsafe {
-    //     refresh(fb.as_raw_fd(), &mut update_info);
-    // }
 
-    // println!("opening img...");
-    // let path = env::args().nth(1)
-    //     .ok_or("Must provide arg for image file")?;
-    // let img: DynamicImage = image::open(&path)
-    //     .map_err(|e| format!("Error opening image {}: {}", path, e))?;
     let bw_img = img.to_luma();
-    // println!("done");
 
     draw_img(
         fb_ptr,
@@ -360,10 +343,10 @@ fn update_meme(img: DynamicImage, meme_id: i32) -> Result<(), String> {
         vinfo.yres)
     .map_err(|e| format!("Error drawing image: {}", e))?;
 
-    sleep(Duration::from_millis(1000));
+    sleep(Duration::from_millis(2000));
 
-    fs::write(MEME_ID_PATH, meme_id.to_string().into_bytes())
-        .map_err(|e| format!("Error updating local meme id to {}: {}", meme_id, e))
+    *local_meme_id = Some(server_meme_id);
+    Ok(())
 }
 
 fn draw_img(
@@ -374,30 +357,9 @@ fn draw_img(
     width: u32,
     height: u32) -> Result<(), String>
 {
-    let mut new_width = width;
-    let mut new_height = height;
-    if img_buf.width() != width || img_buf.height() != height {
-        let img_ratio = img_buf.width() as f32 / img_buf.height() as f32;
-        let scr_ratio = width as f32 / height as f32;
-        if img_ratio > scr_ratio { // img wider than screen
-            let ratio: f32 = width as f32 / img_buf.width() as f32;
-            new_width = width;
-            new_height = (img_buf.height() as f32 * ratio) as u32;
-        } else { // img taller than screen
-            let ratio: f32 = height as f32 / img_buf.height() as f32;
-            new_width = (img_buf.width() as f32 * ratio) as u32;
-            new_height = height;
-        };
-    }
-
-    log(&format!("resizing to {}w x {}h", new_width, new_height));
-    let resized_img = resize(img_buf, new_width, new_height, FilterType::CatmullRom);
-    // log("brightening image");
-    // let bright_img = brighten(&resized_img, 25);
-
-    for y in 0..new_height {
-        for x in 0..new_width {
-            let px = resized_img.get_pixel(x, y);
+    for y in 0..min(img_buf.height(), height) {
+        for x in 0..min(img_buf.width(), width) {
+            let px = img_buf.get_pixel(x, y);
             let idx = (x + y * width) as isize;
             // println!("setting x={} and y={} with idx {}", x, y, idx);
             unsafe {
@@ -420,17 +382,3 @@ fn refresh(fb_desc: i32, update_info: &mut MxcfbUpdateData51) -> Result<(), Stri
         Ok(())
     }
 }
-
-// fn make_http_request() {
-//     let mut stream = TcpStream::connect("69.162.69.148:80")
-//         .expect("Failed to open tcp socket");
-
-//     let _ = stream.write(
-//             "GET / HTTP/1.1\r\n\
-//             Host: icanhazip.com\r\n\r\n".as_bytes())
-//         .expect("write failed");
-//     let mut response = String::new();
-//     let _ = stream.read_to_string(&mut response)
-//         .expect("read failed");
-//     println!("response:\n{}", response);
-// }

@@ -3,10 +3,16 @@ name = "kindle_rust"
 version = "0.1.0"
 authors = ["garyemerson <gmohammadioun@gmail.com>"]
 
+[target.arm-unknown-linux-musleabi]
+linker = "arm-linux-gnueabi-gcc"
+
 [profile.release]
 # lto = true
+panic = "abort"
+# for better optimization at expense of compile times (from https://jamesmunns.com/blog/tinyrocket/)
 codegen-units = 1
 incremental = false
+opt-level = "z" # optimize for binary size
 
 [dependencies]
 memmap = "0.6.2"
