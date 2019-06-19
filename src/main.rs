@@ -127,7 +127,6 @@ struct MxcfbUpdateData51 {
 thread_local! {
     static LOCAL_MEME_ID: RefCell<Option<i32>> = RefCell::new(None);
 }
-// const MEME_LOG_FILE: &str = "meme.log";
 
 fn get_vscreen_info(fb_desc: i32) -> Result<FbVarScreenInfo, String> {
     let mut vinfo: FbVarScreenInfo = unsafe { mem::zeroed() };
