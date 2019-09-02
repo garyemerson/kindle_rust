@@ -1,10 +1,18 @@
-build with: cargo build --release --target=arm-unknown-linux-musleabi
+building
+--------
+* compile on ubuntu
+* target triple: arm-unknown-linux-musleabi
+* cross compile toolchain: gcc-linaro-5.5.0-2017.10-x86_64_arm-linux-gnueabi
+* compile commands:
+  * cargo build --release --target=arm-unknown-linux-musleabi
+  * rustc --target=arm-unknown-linux-musleabi -C linker=~/scrap/gcc-linaro-5.5.0-2017.10-x86_64_arm-linux-gnueabi/bin/arm-linux-gnueabi-gcc src/main.rs
+* need entire cross compiler folder present bc it contains required libs
 
 TODO
-====
+----
 * website for upload picture
-    * implement POST method for meme upload on server side
-    * implement GET method for battery status on server side
+  * implement POST method for meme upload on server side
+  * implement GET method for battery status on server side
 * move almost all image processing to server side and do minimal processing on kindle to preserve battery
 * fix Content-type on server side, right now everything is hardcoded as "application/json; charset=utf-8"
 * alert and/or badge when kindle battery is low

@@ -1,24 +1,21 @@
-extern crate memmap;
-extern crate libc;
-extern crate image;
-extern crate chrono;
-
 // use std::io::prelude::*;
 // use std::net::TcpStream;
 // use std::io::{self, Write};
 use std::cell::RefCell;
 use std::cmp::min;
 use std::fs::{self, OpenOptions};
-use std::{mem, env, str};
+use std::io::Read;
 use std::os::unix::io::AsRawFd;
 use std::process::{exit, Command};
 use std::thread::sleep;
 use std::time::{/*Instant, SystemTime,*/ Duration};
-// use image::imageops::{resize, overlay /*, brighten*/};
+use std::{mem, env, str};
+
+use chrono::Local;
 use image::{ImageBuffer, Luma, DynamicImage, Pixel, /*FilterType,*/ load_from_memory};
+// use image::imageops::{resize, overlay /*, brighten*/};
 use libc::ioctl;
 use memmap::{MmapOptions, MmapMut};
-use chrono::Local;
 
 
 #[repr(C)]
@@ -224,26 +221,26 @@ fn kindle_sleep(process_sleep: Duration, deep_sleep: Duration) -> Result<(), Str
 }
 
 fn maybe_update_meme() -> Result<bool, String> {
-    let server_meme_id = update_battery_status_and_get_meme_id()
-        .map_err(|e| format!("Error updating status and getting meme id: {}", e))?;
+    let (server_meme_id, meme_bytes) = update_battery_status_and_get_meme()
+        .map_err(|e| format!("Error updating status and getting meme id and bytes: {}", e))?;
 
+    // let server_meme_id = update_battery_status_and_get_meme()
+    //     .map_err(|e| format!("Error updating status and getting meme id: {}", e))?;
     if server_meme_id == -1 {
         log("server meme id is -1, exiting");
         exit(0);
     }
-
     LOCAL_MEME_ID.with(|local_meme_id_cell| {
         let mut local_meme_id = local_meme_id_cell.borrow_mut();
         log(&format!("server_meme_id is {}, local_meme_id is {:?}", server_meme_id, local_meme_id));
-
         if local_meme_id.is_none() || local_meme_id.expect("id") != server_meme_id {
-            let output_raw: Vec<u8> = Command::new("curl")
-                .arg("http://garspace.com/metrics/api/meme")
-                .output()
-                .map_err(|e| format!("Error to executing curl to get meme: {}", e))?
-                .stdout;
-            let img = load_from_memory(&output_raw)
-                .map_err(|e| format!("Error loading PNG from buffer with length {}: {}", output_raw.len(), e))?;
+            // let output_raw: Vec<u8> = Command::new("curl")
+            //     .arg("http://garspace.com/metrics/api/meme")
+            //     .output()
+            //     .map_err(|e| format!("Error to executing curl to get meme: {}", e))?
+            //     .stdout;
+            let img = load_from_memory(&meme_bytes)
+                .map_err(|e| format!("Error loading PNG from buffer with length {}: {}", meme_bytes.len(), e))?;
             update_meme(img, server_meme_id, &mut local_meme_id)
                 .map_err(|e| format!("Error updating meme: {}", e))?;
             Ok(true)
@@ -253,24 +250,52 @@ fn maybe_update_meme() -> Result<bool, String> {
     })
 }
 
-fn update_battery_status_and_get_meme_id() -> Result<i32, String> {
+fn update_battery_status_and_get_meme() -> Result<(i32, Vec<u8>)/*i32*/, String> {
     let battery_percent_path = "/sys/devices/system/yoshi_battery/yoshi_battery0/battery_capacity";
     let battery_percent_raw = fs::read_to_string(battery_percent_path)
         .map_err(|e| format!("Error reading battery percentage from {}: {}", battery_percent_path, e))?;
     let battery_percent = battery_percent_raw.trim().trim_matches('%');
 
-    let output_raw = Command::new("curl")
-        .arg("--data")
-        .arg(battery_percent)
-        .arg("http://garspace.com/metrics/api/meme_status")
-        .output()
-        .map_err(|e| format!("Error to executing curl to get meme id: {}", e))?
-        .stdout;
-    let output = str::from_utf8(&output_raw)
-        .map_err(|e| format!("Error converting output to utf8: {}", e))?
-        .trim();
-    output.parse::<i32>()
-        .map_err(|e| format!("Error converting output '{}' to i32: {}", output, e))
+    LOCAL_MEME_ID.with(|local_meme_id_cell| {
+        let local_meme_id = match *local_meme_id_cell.borrow_mut() {
+            Some(id) => format!(" {}", id),
+            None => String::new(),
+        };
+
+        let mut response_bytes: Vec<u8> = Vec::new();
+        reqwest::Client::new()
+            .post("http://garspace.com/metrics/api/meme_status")
+            .body(format!("{}{}", battery_percent, local_meme_id))
+            .send()
+            .map_err(|e| format!("Error sending meme_status post: {}", e))?
+            .read_to_end(&mut response_bytes)
+            .map_err(|e| format!("Error reading post response: {}", e))?;
+
+        let mut parts = response_bytes.splitn(2, |x| *x == '\n' as u8);
+        let server_meme_id_bytes = parts.next()
+            .ok_or("Expected split chunck with meme id but got nothing")?;
+        let server_meme_id = str::from_utf8(server_meme_id_bytes)
+            .map_err(|e| format!("Error converting output to utf8: {}", e))?
+            .parse::<i32>()
+            .map_err(|e| format!("Error parseing meme id to i32: {}", e))?;
+        let meme_bytes = parts.next()
+            .ok_or("Expected split chunck with meme id but got nothing")?
+            .to_vec();
+        Ok((server_meme_id, meme_bytes))
+
+        // let output_raw = Command::new("curl")
+        //     .arg("--data")
+        //     .arg(format!("{}{}", battery_percent, local_meme_id))
+        //     .arg("http://garspace.com/metrics/api/meme_status")
+        //     .output()
+        //     .map_err(|e| format!("Error to executing curl to get meme id: {}", e))?
+        //     .stdout;
+        // let output = str::from_utf8(&output_raw)
+        //     .map_err(|e| format!("Error converting output to utf8: {}", e))?
+        //     .trim();
+        // output.parse::<i32>()
+        //     .map_err(|e| format!("Error converting output '{}' to i32: {}", output, e))
+    })
 }
 
 fn clear_screen() -> Result<(), String> {

@@ -1,3 +1,2 @@
 [target.arm-unknown-linux-musleabi]
 linker = "/root/scrap/gcc-linaro-5.5.0-2017.10-x86_64_arm-linux-gnueabi/bin/arm-linux-gnueabi-gcc"
-#linker = "arm-linux-gnueabi-gcc"
