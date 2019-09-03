@@ -263,13 +263,13 @@ fn update_battery_status_and_get_meme() -> Result<(i32, Vec<u8>)/*i32*/, String>
         };
 
         let mut response_bytes: Vec<u8> = Vec::new();
-        reqwest::Client::new()
-            .post("http://garspace.com/metrics/api/meme_status")
-            .body(format!("{}{}", battery_percent, local_meme_id))
-            .send()
-            .map_err(|e| format!("Error sending meme_status post: {}", e))?
-            .read_to_end(&mut response_bytes)
-            .map_err(|e| format!("Error reading post response: {}", e))?;
+        // reqwest::Client::new()
+        //     .post("http://garspace.com/metrics/api/meme_status")
+        //     .body(format!("{}{}", battery_percent, local_meme_id))
+        //     .send()
+        //     .map_err(|e| format!("Error sending meme_status post: {}", e))?
+        //     .read_to_end(&mut response_bytes)
+        //     .map_err(|e| format!("Error reading post response: {}", e))?;
 
         let mut parts = response_bytes.splitn(2, |x| *x == '\n' as u8);
         let server_meme_id_bytes = parts.next()
