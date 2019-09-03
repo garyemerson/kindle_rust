@@ -220,8 +220,6 @@ fn maybe_update_meme() -> Result<bool, String> {
     let (server_meme_id, meme_bytes) = update_battery_status_and_get_meme()
         .map_err(|e| format!("Error updating status and getting meme id and bytes: {}", e))?;
 
-    // let server_meme_id = update_battery_status_and_get_meme()
-    //     .map_err(|e| format!("Error updating status and getting meme id: {}", e))?;
     if server_meme_id == -1 {
         log("server meme id is -1, exiting");
         exit(0);
@@ -230,11 +228,6 @@ fn maybe_update_meme() -> Result<bool, String> {
         let mut local_meme_id = local_meme_id_cell.borrow_mut();
         log(&format!("server_meme_id is {}, local_meme_id is {:?}", server_meme_id, local_meme_id));
         if local_meme_id.is_none() || local_meme_id.expect("id") != server_meme_id {
-            // let output_raw: Vec<u8> = Command::new("curl")
-            //     .arg("http://garspace.com/metrics/api/meme")
-            //     .output()
-            //     .map_err(|e| format!("Error to executing curl to get meme: {}", e))?
-            //     .stdout;
             let img = load_from_memory(&meme_bytes)
                 .map_err(|e| format!("Error loading PNG from buffer with length {}: {}", meme_bytes.len(), e))?;
             update_meme(img, server_meme_id, &mut local_meme_id)
