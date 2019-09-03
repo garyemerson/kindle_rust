@@ -16,6 +16,10 @@ use image::{ImageBuffer, Luma, DynamicImage, Pixel, /*FilterType,*/ load_from_me
 // use image::imageops::{resize, overlay /*, brighten*/};
 use libc::ioctl;
 use memmap::{MmapOptions, MmapMut};
+// use hyper::{Body, Client, Request};
+// use hyper::rt::Future;
+// use hyper::rt::Stream;
+use mio_httpc::CallBuilder;
 
 
 #[repr(C)]
@@ -271,13 +275,38 @@ fn update_battery_status_and_get_meme() -> Result<(i32, Vec<u8>)/*i32*/, String>
         //     .read_to_end(&mut response_bytes)
         //     .map_err(|e| format!("Error reading post response: {}", e))?;
 
-        let response_bytes: Vec<u8> = Command::new("curl")
-            .arg("--data")
-            .arg(format!("'{} {}'", battery_percent, local_meme_id))
-            .arg("http://garspace.com/metrics/api/meme_status")
-            .output()
-            .map_err(|e| format!("Error to executing curl to get meme id: {}", e))?
-            .stdout;
+        // let response_bytes: Vec<u8> = Command::new("curl")
+        //     .arg("--data")
+        //     .arg(format!("'{} {}'", battery_percent, local_meme_id))
+        //     .arg("http://garspace.com/metrics/api/meme_status")
+        //     .output()
+        //     .map_err(|e| format!("Error to executing curl to get meme id: {}", e))?
+        //     .stdout;
+
+        // let client = Client::new();
+        // let req = Request::builder()
+        //     .method("POST")
+        //     .uri("http://garspace.com/metrics/api/meme_status")
+        //     .body(Body::from(format!("{} {}", battery_percent, local_meme_id)))
+        //     .expect("request builder");
+        // let mut response_bytes: Vec<u8> = Vec::new();
+        // let future = client.request(req)
+        //     .and_then(|res| {
+        //         // let foo: () = res;
+        //         let foo = res.into_body();
+        //         foo.for_each(|chunk| {
+        //             response_bytes.append(&mut chunk.to_vec());
+        //         });
+        //     })
+        //     // .map_err(|e| format!("Error sending meme_status post: {}", e))
+        //     .wait();
+
+        let (response_meta, response_bytes) = CallBuilder::get()
+            .url("http://garspace.com/metrics/api/meme_status")
+            .map_err(|e| format!("Error setting url for meme_status post: {}", e))?
+            .body(format!("{} {}", battery_percent, local_meme_id).into_bytes())
+            .exec()
+            .map_err(|e| format!("Error sending meme_status post: {}", e))?;
 
         let mut parts = response_bytes.splitn(2, |x| *x == '\n' as u8);
         let server_meme_id_bytes = parts.next()
