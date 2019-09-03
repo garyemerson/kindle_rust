@@ -275,13 +275,13 @@ fn update_battery_status_and_get_meme() -> Result<(i32, Vec<u8>)/*i32*/, String>
         //     .read_to_end(&mut response_bytes)
         //     .map_err(|e| format!("Error reading post response: {}", e))?;
 
-        // let response_bytes: Vec<u8> = Command::new("curl")
-        //     .arg("--data")
-        //     .arg(format!("'{} {}'", battery_percent, local_meme_id))
-        //     .arg("http://garspace.com/metrics/api/meme_status")
-        //     .output()
-        //     .map_err(|e| format!("Error to executing curl to get meme id: {}", e))?
-        //     .stdout;
+        let response_bytes: Vec<u8> = Command::new("curl")
+            .arg("--data")
+            .arg(format!("'{} {}'", battery_percent, local_meme_id))
+            .arg("http://garspace.com/metrics/api/meme_status")
+            .output()
+            .map_err(|e| format!("Error to executing curl to get meme id: {}", e))?
+            .stdout;
 
         // let client = Client::new();
         // let req = Request::builder()
@@ -301,12 +301,12 @@ fn update_battery_status_and_get_meme() -> Result<(i32, Vec<u8>)/*i32*/, String>
         //     // .map_err(|e| format!("Error sending meme_status post: {}", e))
         //     .wait();
 
-        let (response_meta, response_bytes) = CallBuilder::get()
-            .url("http://garspace.com/metrics/api/meme_status")
-            .map_err(|e| format!("Error setting url for meme_status post: {}", e))?
-            .body(format!("{} {}", battery_percent, local_meme_id).into_bytes())
-            .exec()
-            .map_err(|e| format!("Error sending meme_status post: {}", e))?;
+        // let (response_meta, response_bytes) = CallBuilder::get()
+        //     .url("http://garspace.com/metrics/api/meme_status")
+        //     .map_err(|e| format!("Error setting url for meme_status post: {}", e))?
+        //     .body(format!("{} {}", battery_percent, local_meme_id).into_bytes())
+        //     .exec()
+        //     .map_err(|e| format!("Error sending meme_status post: {}", e))?;
 
         let mut parts = response_bytes.splitn(2, |x| *x == '\n' as u8);
         let server_meme_id_bytes = parts.next()
