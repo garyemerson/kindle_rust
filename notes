@@ -7,6 +7,7 @@ building
   * cargo build --release --target=arm-unknown-linux-musleabi
   * rustc --target=arm-unknown-linux-musleabi -C linker=~/scrap/gcc-linaro-5.5.0-2017.10-x86_64_arm-linux-gnueabi/bin/arm-linux-gnueabi-gcc src/main.rs
 * need entire cross compiler folder present bc it contains required libs
+* seems like backtrace-sys can't cross compile
 
 TODO
 ----
