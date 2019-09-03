@@ -258,7 +258,7 @@ fn update_battery_status_and_get_meme() -> Result<(i32, Vec<u8>)/*i32*/, String>
 
     LOCAL_MEME_ID.with(|local_meme_id_cell| {
         let local_meme_id = match *local_meme_id_cell.borrow_mut() {
-            Some(id) => format!(" {}", id),
+            Some(id) => id.to_string(),
             None => String::new(),
         };
 
@@ -273,7 +273,7 @@ fn update_battery_status_and_get_meme() -> Result<(i32, Vec<u8>)/*i32*/, String>
 
         let response_bytes: Vec<u8> = Command::new("curl")
             .arg("--data")
-            .arg(format!("{}{}", battery_percent, local_meme_id))
+            .arg(format!("{} {}", battery_percent, local_meme_id))
             .arg("http://garspace.com/metrics/api/meme_status")
             .output()
             .map_err(|e| format!("Error to executing curl to get meme id: {}", e))?
@@ -281,14 +281,14 @@ fn update_battery_status_and_get_meme() -> Result<(i32, Vec<u8>)/*i32*/, String>
 
         let mut parts = response_bytes.splitn(2, |x| *x == '\n' as u8);
         let server_meme_id_bytes = parts.next()
-            .ok_or("Expected split chunck with meme id but got nothing")?;
+            .ok_or("Expected split chunk with meme id but got nothing")?;
         let foo = str::from_utf8(server_meme_id_bytes)
             .map_err(|e| format!("Error converting output to utf8: {}", e))?;
         let server_meme_id = foo
             .parse::<i32>()
             .map_err(|e| format!("Error parseing meme id of '{}' to i32: {}", foo, e))?;
         let meme_bytes = parts.next()
-            .ok_or("Expected split chunck with meme id but got nothing")?
+            .ok_or("Expected split chunk with meme id but got nothing")?
             .to_vec();
         Ok((server_meme_id, meme_bytes))
 
