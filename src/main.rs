@@ -19,7 +19,7 @@ use memmap::{MmapOptions, MmapMut};
 // use hyper::{Body, Client, Request};
 // use hyper::rt::Future;
 // use hyper::rt::Stream;
-use mio_httpc::CallBuilder;
+// use mio_httpc::CallBuilder;
 
 
 #[repr(C)]
