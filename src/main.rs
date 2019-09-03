@@ -277,7 +277,7 @@ fn update_battery_status_and_get_meme() -> Result<(i32, Vec<u8>)/*i32*/, String>
 
         let response_bytes: Vec<u8> = Command::new("curl")
             .arg("--data")
-            .arg(format!("'{} {}'", battery_percent, local_meme_id))
+            .arg(format!("{} {}", battery_percent, local_meme_id))
             .arg("http://garspace.com/metrics/api/meme_status")
             .output()
             .map_err(|e| format!("Error to executing curl to get meme id: {}", e))?
