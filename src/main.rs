@@ -219,6 +219,7 @@ fn kindle_sleep(process_sleep: Duration, deep_sleep: Duration) -> Result<(), Str
 fn maybe_update_meme() -> Result<bool, String> {
     let (server_meme_id, meme_bytes) = update_battery_status_and_get_meme()
         .map_err(|e| format!("Error updating status and getting meme id and bytes: {}", e))?;
+    log(&format!("server_meme_id is {} and meme_bytes.len() is {}", server_meme_id, meme_bytes.len()));
 
     if server_meme_id == -1 {
         log("server meme id is -1, exiting");
