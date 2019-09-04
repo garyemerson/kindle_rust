@@ -12,10 +12,9 @@ use image::{ImageBuffer, Luma, DynamicImage, Pixel, /*FilterType,*/ load_from_me
 // use image::imageops::{resize, overlay /*, brighten*/};
 use libc::ioctl;
 use memmap::{MmapOptions, MmapMut};
+use fb::{FbVarScreenInfo, FbFixScreenInfo, MxcfbUpdateData51};
 
 mod fb;
-
-use fb::{FbVarScreenInfo, FbFixScreenInfo, MxcfbUpdateData51};
 
 thread_local! {
     static LOCAL_MEME_ID: RefCell<Option<i32>> = RefCell::new(None);
