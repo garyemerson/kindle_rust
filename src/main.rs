@@ -189,7 +189,7 @@ fn main() {
             }
         }
 
-        kindle_sleep(Duration::from_secs(30), Duration::from_secs(10 /*5 * 60*/))
+        kindle_sleep(Duration::from_secs(30), Duration::from_secs(5 * 60))
             .unwrap_or_else(|e| log(&format!("Error putting kindle to sleep: {}", e)));
     }
 }
