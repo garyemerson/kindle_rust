@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::cmp::min;
+use std::env::args;
 use std::fs::{self, OpenOptions};
+use std::io::{Read, stdin, stdout, Write};
 use std::os::unix::io::AsRawFd;
 use std::process::{exit, Command};
 use std::thread::sleep;
@@ -13,6 +15,7 @@ use image::{ImageBuffer, Luma, DynamicImage, Pixel, /*FilterType,*/ load_from_me
 use libc::ioctl;
 use memmap::{MmapOptions, MmapMut};
 use fb::{FbVarScreenInfo, FbFixScreenInfo, MxcfbUpdateData51};
+use rand::{thread_rng, Rng};
 
 mod fb;
 
@@ -71,7 +74,255 @@ fn get_fscreen_info(fb_desc: i32) -> Result<FbFixScreenInfo, String> {
 //         echo mem > /sys/power/state
 // done
 
+fn foobar(waveform_mode: u32, update_mode: u32, update_marker: u32, ) -> Result<(), String> {
+    clear_screen()
+        .map_err(|e| format!("Error clearing screen: {}", e))?;
+
+    let fb_path = "/dev/fb0";
+    let fb = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(fb_path)
+        .map_err(|e| format!("Error in opening framebuffer at {}: {}", fb_path, e))?;
+    let vinfo = get_vscreen_info(fb.as_raw_fd())
+        .map_err(|e| format!("Error in get_vscreen_info: {}", e))?;
+    let finfo = get_fscreen_info(fb.as_raw_fd())
+        .map_err(|e| format!("Error in get_fscreen_info: {}", e))?;
+    let screensize = (vinfo.yres * finfo.line_length) as usize;
+    let mut fb_mmap: MmapMut = unsafe {
+        MmapOptions::new()
+            .len(screensize)
+            .map_mut(&fb)
+            .map_err(|e| format!("error mmap-ing fb: {}", e))?
+    };
+    let fb_ptr: *mut u8 = fb_mmap.as_mut_ptr();
+
+    let width = finfo.line_length;
+    let height = vinfo.yres;
+    println!("width: {}, height: {}", width, height);
+
+    gmplay8(fb_ptr, fb.as_raw_fd(), vinfo).expect("gmplay8");
+
+    // let frames: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = (0..60)
+    //     .map(|n| {
+    //         let path = format!("frames/frame{}.png", n);
+    //         println!("loading frame {}", n);
+    //         image::open(&path)
+    //             .expect(&format!("open image {}", path))
+    //             .to_luma()
+    //     })
+    //     .collect();
+    // println!("{} frames", frames.len());
+
+    // loop {
+    //     print!("waveform_mode: ");
+    //     stdout().flush().expect("flush");
+    //     let mut s = String::new();
+    //     stdin().read_line(&mut s).expect("Did not enter a correct string");
+    //     let waveform_mode = s.trim().parse::<u32>().expect("parse u32 from input");
+    //     for f in frames.clone() {
+    //         let frame_timer = std::time::Instant::now();
+    //         let mut update_info: MxcfbUpdateData51 = unsafe { mem::zeroed() };
+    //         update_info.waveform_mode = waveform_mode /*1*/ /*257*/ /*4*/ /*2*/ /*3*/ /*6*/;
+    //         update_info.update_mode = update_mode;
+    //         update_info.update_marker = update_marker /*1*/;
+    //         update_info.temp = 0x1001;
+    //         update_info.update_region.width = vinfo.xres;
+    //         update_info.update_region.height = vinfo.yres;
+
+    //         let timer = std::time::Instant::now();
+    //         draw_img(fb_ptr, fb.as_raw_fd(), &mut update_info, &f, width, height)
+    //             .map_err(|e| format!("Error drawing image: {}", e))?;
+    //         println!("{}ms", timer.elapsed().as_millis());
+    //         let draw_time = frame_timer.elapsed().as_millis();
+    //         if draw_time > 50 {
+    //             println!("{}ms, blew frame budget :(", draw_time);
+    //         } else {
+    //             sleep(Duration::from_millis(50 as u64 - draw_time as u64));
+    //         }
+    //     }
+    // }
+
+    // for _ in 0..120 {
+    //     let x_offset = thread_rng().gen_range(0, width - 100);
+    //     let y_offset = thread_rng().gen_range(0, height - 100);
+    //     foo_draw(fb_ptr, fb.as_raw_fd(), vinfo, width, height, x_offset, y_offset)
+    //         .map_err(|e| format!("error foo_draw: {}", e))?;
+    // }
+
+    Ok(())
+}
+
+struct IterChunks<T> {
+    inner: Box<Iterator<Item=T>>,
+    chunk_size: usize,
+}
+impl<T> Iterator for IterChunks<T> {
+    type Item = Vec<T>;
+
+    fn next(&mut self) -> Option<Vec<T>> {
+        let mut v = Vec::new();
+        while v.len() != self.chunk_size {
+            match self.inner.next() {
+                Some(x) => v.push(x),
+                None => break,
+            }
+        }
+        if v.len() == 0 {
+            None
+        } else {
+            Some(v)
+        }
+    }
+}
+
+fn gmplay8(fb_ptr: *mut u8, fb_desc: i32, vinfo: FbVarScreenInfo) -> Result<(), String> {
+    let mut byte_stream = stdin();
+        // .bytes();
+        // .map(|mabye_byte| mabye_byte.expect("byte"));
+    // let frames = IterChunks { inner: Box::new(byte_stream), chunk_size: (600 * 800) / 8};
+    let timer = std::time::Instant::now();
+    let mut frame_count = 0;
+    let mut frame_load_time = std::time::Instant::now();
+    // for (f_num, frame) in frames.enumerate() {
+    let mut frame = vec![0; (600 * 800) / 8];
+    while let Ok(_) = byte_stream.read_exact(&mut frame) {
+        println!("{}ms to load frame", frame_load_time.elapsed().as_millis());
+        let frame_timer = std::time::Instant::now();
+        println!("drawing frame {} with {} bytes", frame_count, frame.len());
+        let chunk_size: usize = /*vinfo.xres_virtual*/ 600 / 8;
+        // let rows = IterChunks { inner: Box::new(frame.into_iter()), chunk_size: chunk_size };
+        for (row_num, row) in frame.chunks(chunk_size).enumerate() { //rows.enumerate() {
+            // println!("chunk_size is {}", chunk_size);
+            // println!("drawing row {}", row_num);
+            for (i, byte) in row.iter().enumerate() {
+                let fb_idx = (row_num * vinfo.xres_virtual as usize) as isize + i as isize * 8;
+                // println!("writing row chunk {} with fb_idx {}", i, fb_idx);
+                let mut byte_copy = *byte;
+
+                unsafe {
+                    *fb_ptr.offset(fb_idx) = (byte_copy & 1) * 255;
+                    byte_copy >>= 1;
+                    *fb_ptr.offset(fb_idx + 1) = (byte_copy & 1) * 255;
+                    byte_copy >>= 1;
+                    *fb_ptr.offset(fb_idx + 2) = (byte_copy & 1) * 255;
+                    byte_copy >>= 1;
+                    *fb_ptr.offset(fb_idx + 3) = (byte_copy & 1) * 255;
+                    byte_copy >>= 1;
+                    *fb_ptr.offset(fb_idx + 4) = (byte_copy & 1) * 255;
+                    byte_copy >>= 1;
+                    *fb_ptr.offset(fb_idx + 5) = (byte_copy & 1) * 255;
+                    byte_copy >>= 1;
+                    *fb_ptr.offset(fb_idx + 6) = (byte_copy & 1) * 255;
+                    byte_copy >>= 1;
+                    *fb_ptr.offset(fb_idx + 7) = (byte_copy & 1) * 255;
+                }
+            }
+        }
+
+        let mut update_info: MxcfbUpdateData51 = unsafe { mem::zeroed() };
+        update_info.waveform_mode = 1 /*4*/ /*2*/;
+        update_info.update_marker = 1;
+        update_info.temp = 0x1001;
+        update_info.update_region.width = vinfo.xres;
+        update_info.update_region.height = vinfo.yres;
+
+        refresh(fb_desc, &mut update_info)
+            .map_err(|e| format!("Error refreshing screen: {}", e))?;
+        frame_count += 1;
+
+        let draw_time = frame_timer.elapsed().as_millis();
+        if draw_time > 50 {
+            println!("{}ms, blew frame budget :(", draw_time);
+        } else {
+            sleep(Duration::from_millis(50 as u64 - draw_time as u64));
+        }
+        // let draw_time = frame_timer.elapsed().as_millis();
+        // if draw_time > 50 {
+        //     println!("{}ms, blew frame budget :(", draw_time);
+        // } else {
+        //     while frame_timer.elapsed().as_millis() < 50 {
+        //         sleep(Duration::from_millis(1));
+        //     }
+        // }
+        frame_load_time = std::time::Instant::now();
+    }
+    println!("{} frames in {}s", frame_count, timer.elapsed().as_millis() as f64 / 1000.0);
+
+    Ok(())
+
+    // u32 i, x, y, b, fbsize = FBSIZE;
+    // u8 fbt[FBSIZE];
+    // while (fread(fbt, fbsize, 1, stdin)) {
+    //     teu += 50; // teu: next update time
+    //     // if (getmsec() > teu + 1000) continue; // drop frame if > 1 sec behind
+    //     gmlib(GMLIB_VSYNC); // wait for fb0 ready
+    //     for (y = 0; y < 800; y++)
+    //         for (x = 0; x < 600; x += 8) {
+    //             b = fbt[600 / 8 * y + x / 8];
+    //             i = y * fs + x;
+    //             fb0[i] = (b & 1) * 255;
+    //             b >>= 1;
+    //             fb0[i + 1] = (b & 1) * 255;
+    //             b >>= 1;
+    //             fb0[i + 2] = (b & 1) * 255;
+    //             b >>= 1;
+    //             fb0[i + 3] = (b & 1) * 255;
+    //             b >>= 1;
+    //             fb0[i + 4] = (b & 1) * 255;
+    //             b >>= 1;
+    //             fb0[i + 5] = (b & 1) * 255;
+    //             b >>= 1;
+    //             fb0[i + 6] = (b & 1) * 255;
+    //             b >>= 1;
+    //             fb0[i + 7] = (b & 1) * 255;
+    //         }
+    //     fc++;
+    //     gmlib(GMLIB_UPDATE);
+    // }
+}
+
+fn foo_draw(
+    fb_ptr: *mut u8,
+    fb_desc: i32,
+    vinfo: FbVarScreenInfo,
+    width: u32,
+    height: u32,
+    x_offset: u32,
+    y_offset: u32) -> Result<(), String>
+{
+    let mut update_info: MxcfbUpdateData51 = unsafe { mem::zeroed() };
+    update_info.waveform_mode = 4 /*2*/;
+    update_info.update_marker = 1;
+    update_info.temp = 0x1001;
+    update_info.update_region.width = vinfo.xres;
+    update_info.update_region.height = vinfo.yres;
+    for y in 0..100 {
+        for x in 0..100 {
+            let idx = ((x + x_offset) + (y + y_offset) * width) as isize;
+            unsafe {
+                *fb_ptr.offset(idx) = 0;
+            }
+        }
+    }
+
+    // println!("refreshing");
+    let timer = std::time::Instant::now();
+    refresh(fb_desc, &mut update_info)
+        .map_err(|e| format!("Error refreshing screen: {}", e))?;
+    println!("{}ms", timer.elapsed().as_millis());
+
+    Ok(())
+}
+
 fn main() {
+    println!("foo");
+    let waveform_mode = args().nth(1).expect("waveform_mode arg").parse::<u32>().expect("parse u32");
+    let update_mode = args().nth(2).expect("update_mode arg").parse::<u32>().expect("parse u32");
+    let update_marker = args().nth(3).expect("update_marker arg").parse::<u32>().expect("parse u32");
+    foobar(waveform_mode, update_mode, update_marker).expect("foobar");
+    return;
+
     env::set_var("RUST_BACKTRACE", "1");
 
     loop {

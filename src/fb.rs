@@ -1,5 +1,5 @@
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Copy, Clone)]
 pub(crate) struct FbBitField {
     pub offset: u32,      /* beginning of bitfield */
     pub length: u32,      /* length of bitfield */
@@ -7,7 +7,7 @@ pub(crate) struct FbBitField {
 }
 
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Copy, Clone)]
 pub(crate) struct FbVarScreenInfo {
     pub xres: u32,           /* visible resolution       */
     pub yres: u32,
